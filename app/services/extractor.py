@@ -31,9 +31,13 @@
   pandas      : 데이터를 표(DataFrame) 형태로 다루는 라이브러리
 """
 
+import logging
 import os
 import tempfile
+import traceback
 from dataclasses import asdict
+
+logger = logging.getLogger(__name__)
 # asdict : PageResult(dataclass) → dict 변환 (JSON 응답에 필요)
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -95,7 +99,9 @@ def extract_page(page, page_num: int, pdf_path: str) -> PageResult:
         page_num: 0-based 페이지 번호
         pdf_path: 원본 PDF 경로 (OCR 폴백 시 이미지 변환에 사용)
     """
+    print(f"[DEBUG] extract_page 시작: page_num={page_num}", flush=True)
     text = page.extract_text() or ""
+    print(f"[DEBUG] extract_text 완료: len={len(text)}", flush=True)
     # page.extract_text() : PDF 페이지의 텍스트 레이어에서 텍스트를 추출.
     # 텍스트 레이어가 없으면 None을 반환 → or "" 로 빈 문자열로 대체.
 
@@ -503,43 +509,38 @@ def extract_parallel(pdf_path: str) -> dict:
     # max_workers : 동시에 실행할 스레드(요리사) 수
     # settings.ocr_max_workers : 기본값 4
 
+    # 페이지 수만 먼저 파악하고 파일을 닫는다.
     with pdfplumber.open(pdf_path) as pdf:
-        pages = list(pdf.pages)
-        # list() : pdfplumber의 페이지 이터레이터를 리스트로 변환
-        # with 블록 안에서 pages를 미리 리스트로 변환해야
-        # with 블록 밖에서도 페이지 객체를 참조할 수 있다.
+        num_pages = len(pdf.pages)
 
-    results: list[PageResult | None] = [None] * len(pages)
-    # 결과를 페이지 번호 순서대로 저장하기 위한 리스트
-    # [None, None, None, ...] 로 초기화 → 나중에 results[i] = 결과 로 채움
-    # 병렬 처리는 순서 보장이 없으므로 인덱스로 관리
+    # 각 스레드가 pdf_path와 페이지 번호만 받아 독립적으로 PDF를 열어 처리한다.
+    # pdfplumber 페이지 객체는 파일 스트림을 공유하므로 스레드 간 전달 금지.
+    # 스레드마다 별도 파일 핸들을 사용해야 "seek of closed file" 경쟁 조건을 피할 수 있다.
+    results: list[PageResult | None] = [None] * num_pages
 
     with ThreadPoolExecutor(max_workers=settings.ocr_max_workers) as executor:
         futures = {
-            executor.submit(_process_page_safe, page, i, pdf_path): i
-            for i, page in enumerate(pages)
+            executor.submit(_process_page_safe, pdf_path, i): i
+            for i in range(num_pages)
         }
-        # executor.submit(함수, 인자...) : 스레드 풀에 작업을 제출
-        # Future : 아직 완료되지 않은 비동기 작업의 "영수증" 같은 객체
-        # futures = {Future: 페이지번호} 딕셔너리
 
         for future in as_completed(futures):
-            # as_completed() : 완료된 Future부터 순서대로 반환
-            i = futures[future]  # 이 Future가 몇 번 페이지인지 확인
+            i = futures[future]
             try:
                 results[i] = future.result()
-                # future.result() : 작업이 완료될 때까지 기다렸다가 반환값 가져오기
             except Exception as e:
+                print(f"[ERROR] page {i} 처리 실패:\n{traceback.format_exc()}", flush=True)
                 results[i] = PageResult(page_num=i, error=str(e), success=False)
-                # 해당 페이지만 실패 처리, 다른 페이지는 계속 진행
 
     return _build_response([r for r in results if r is not None])
     # None이 아닌 결과만 모아서 응답 생성
 
 
-def _process_page_safe(page, page_num: int, pdf_path: str) -> PageResult:
-    """병렬 처리 시 단일 페이지 래퍼 — 예외를 호출자에게 전파한다."""
-    return extract_page(page, page_num, pdf_path)
+def _process_page_safe(pdf_path: str, page_num: int) -> PageResult:
+    """스레드마다 PDF를 독립적으로 열어 단일 페이지를 처리한다."""
+    with pdfplumber.open(pdf_path) as pdf:
+        page = pdf.pages[page_num]
+        return extract_page(page, page_num, pdf_path)
     # 이 함수가 별도로 있는 이유:
     #   executor.submit()에 직접 extract_page를 넘겨도 되지만
     #   래퍼 함수를 두면 나중에 전처리/후처리 로직을 추가하기 쉽다.

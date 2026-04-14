@@ -163,7 +163,6 @@ app/
 
 1. `.env` — 값 노출 (Settings 기본값에만 숨기지 않는다): `PDF_DPI=300`
 2. `config.py Settings` 필드: `pdf_dpi: int = 300`
-3. 코드에서 사용: `dpi=settings.pdf_dpi`
 
 **비즈니스 로직 상수 — Settings 필드만**
 

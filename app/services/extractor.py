@@ -25,12 +25,7 @@ import pytesseract
 from pdf2image import convert_from_path
 from pytesseract import Output
 
-from app.core.config import (
-    CONFIDENCE_THRESHOLDS,
-    TESSERACT_CONFIG,
-    TESSERACT_LANG,
-    settings,
-)
+from app.core.config import settings
 from app.schemas.ocr import PageResult
 
 logger = logging.getLogger(__name__)
@@ -143,8 +138,8 @@ def run_ocr(image: np.ndarray) -> dict:
 
     data = pytesseract.image_to_data(
         preprocessed,
-        lang=TESSERACT_LANG,
-        config=TESSERACT_CONFIG,
+        lang=settings.tesseract_lang,
+        config=settings.tesseract_config,
         output_type=Output.DICT,
     )
 
@@ -167,9 +162,10 @@ def run_ocr(image: np.ndarray) -> dict:
 
 def _get_quality_flag(avg_conf: float) -> str:
     """신뢰도 점수를 등급 문자열로 변환."""
-    if avg_conf >= CONFIDENCE_THRESHOLDS["high"]:   return "high"
-    if avg_conf >= CONFIDENCE_THRESHOLDS["medium"]: return "medium"
-    if avg_conf >= CONFIDENCE_THRESHOLDS["low"]:    return "low"
+    ct = settings.confidence_thresholds
+    if avg_conf >= ct["high"]:   return "high"
+    if avg_conf >= ct["medium"]: return "medium"
+    if avg_conf >= ct["low"]:    return "low"
     return "very_low"
 
 
@@ -205,7 +201,7 @@ def extract_tables(page, page_image: np.ndarray | None) -> list[str]:
     for region in _find_table_regions(page_image):
         y1, y2, x1, x2 = region["y"], region["y2"], region["x"], region["x2"]
         crop     = page_image[y1:y2, x1:x2]   # 표 영역만 잘라냄
-        ocr_text = pytesseract.image_to_string(crop, lang=TESSERACT_LANG)
+        ocr_text = pytesseract.image_to_string(crop, lang=settings.tesseract_lang)
         results.append(f"<!-- OCR table -->\n{ocr_text}")
 
     return results
@@ -351,8 +347,8 @@ def _get_page_image(pdf_path: str, page_num: int) -> np.ndarray:
         pdf_path,
         first_page=page_num + 1,  # pdf2image는 1-based 페이지 번호 사용
         last_page=page_num + 1,
-        dpi=300,
-        # dpi 300: 고해상도 스캔 수준. 낮추면 빠르지만 OCR 정확도가 떨어진다.
+        dpi=settings.pdf_dpi,
+        # .env의 PDF_DPI로 조정. 낮추면 빠르지만 OCR 정확도가 떨어진다.
     )
     return cv2.cvtColor(np.array(images[0]), cv2.COLOR_RGB2BGR)
     # PIL은 RGB, OpenCV는 BGR 순서를 사용하므로 변환 필요.

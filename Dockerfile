@@ -63,18 +63,18 @@ COPY --chown=appuser:appuser . .
 
 USER appuser
 
-# Tesseract/PyTorch 내부 스레드와 외부 ThreadPool 충돌 방지
-# OMP_NUM_THREADS=1 : OpenMP 스레드를 1개로 고정.
-#   extractor.py의 ThreadPoolExecutor가 전체 병렬성을 제어하도록 하기 위함.
-#   이 값이 없으면 Tesseract 내부 스레드와 외부 스레드가 경쟁하여
-#   성능 저하 또는 충돌이 발생할 수 있다.
+# OMP_NUM_THREADS: .env 없이 실행할 때의 폴백 기본값.
+# docker-compose 실행 시 .env의 OMP_NUM_THREADS 값이 이 값을 덮어쓴다.
 ENV OMP_NUM_THREADS=1
+ENV PORT=8900
+# PORT 기본값. .env의 PORT= 값이 런타임에 이 값을 덮어쓴다.
 
-EXPOSE 8000
+EXPOSE $PORT
 
 # 헬스체크: 30초마다 /health 엔드포인트를 호출해 서버 상태를 확인한다.
 # --start-period=60s : 서버 기동 시간을 고려하여 초기 60초는 실패해도 무시.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# sh -c + exec: $PORT 환경변수 치환 후 uvicorn을 PID 1로 교체해 시그널 정상 전달
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"]

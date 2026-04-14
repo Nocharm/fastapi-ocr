@@ -63,11 +63,10 @@ COPY --chown=appuser:appuser . .
 
 USER appuser
 
-# OMP_NUM_THREADS: .env 없이 실행할 때의 폴백 기본값.
-# docker-compose 실행 시 .env의 OMP_NUM_THREADS 값이 이 값을 덮어쓴다.
+# OMP_NUM_THREADS, PORT: .env 없이 실행할 때의 폴백 기본값.
+# docker-compose 실행 시 .env 값이 이 값을 덮어쓴다.
 ENV OMP_NUM_THREADS=1
 ENV PORT=8900
-# PORT 기본값. .env의 PORT= 값이 런타임에 이 값을 덮어쓴다.
 
 EXPOSE $PORT
 

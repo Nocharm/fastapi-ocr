@@ -24,6 +24,23 @@ class Settings(BaseSettings):
     tesseract_cmd: str = ""
     # Tesseract 실행 파일 경로. 빈 문자열이면 시스템 PATH 자동 탐색.
 
+    pdf_dpi: int = 300
+    # PDF→이미지 변환 해상도. 낮추면 빠르지만 OCR 정확도 하락.
+
+    omp_num_threads: int = 1
+    # OpenMP 스레드 수. ThreadPoolExecutor와 충돌 방지용. Dockerfile ENV 폴백과 맞춰야 한다.
+
+    tesseract_config: str = "--psm 6 --oem 3 -c preserve_interword_spaces=1"
+    # --psm 6: 단일 균일 텍스트 블록 분석. --oem 3: LSTM 자동 선택.
+
+    tesseract_lang: str = "kor+eng"
+    # 인식 언어. 추가 언어는 tesseract-ocr-<lang> 패키지 설치 필요.
+
+    confidence_thresholds: dict[str, int] = {
+        "high": 80, "medium": 60, "low": 40, "very_low": 0
+    }
+    # 신뢰도 등급 경계. 분류 로직 자체이므로 .env에서 오버라이드하지 않는다.
+
 
 settings = Settings()
 
@@ -34,7 +51,7 @@ if settings.tesseract_cmd:
 # OMP_NUM_THREADS=1: ThreadPoolExecutor(외부)와 Tesseract 내부 OpenMP 스레드가
 # 동시에 돌면 경쟁으로 성능 저하 또는 충돌이 발생한다.
 # setdefault: 이미 설정된 값은 덮어쓰지 않음.
-os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", str(settings.omp_num_threads))
 
 
 # --- 런타임에 변경되지 않는 상수 ---

@@ -226,3 +226,39 @@ def test_table_to_markdown_empty():
     """빈 테이블 입력 → 빈 문자열 반환."""
     assert _make_markdown_table([]) == ""
     assert _make_markdown_table([[]]) == ""
+
+
+# --- Settings 필드 검증 ---
+
+def test_settings_has_pdf_dpi():
+    """pdf_dpi가 Settings에 존재하고 양수인지 확인."""
+    from app.core.config import settings
+    assert isinstance(settings.pdf_dpi, int)
+    assert settings.pdf_dpi > 0
+
+def test_settings_has_omp_num_threads():
+    """omp_num_threads가 Settings에 존재하고 1 이상인지 확인."""
+    from app.core.config import settings
+    assert isinstance(settings.omp_num_threads, int)
+    assert settings.omp_num_threads >= 1
+
+def test_settings_has_tesseract_config():
+    """tesseract_config가 Settings에 존재하고 --psm 옵션을 포함하는지 확인."""
+    from app.core.config import settings
+    assert isinstance(settings.tesseract_config, str)
+    assert "--psm" in settings.tesseract_config
+
+def test_settings_has_tesseract_lang():
+    """tesseract_lang이 Settings에 존재하고 kor을 포함하는지 확인."""
+    from app.core.config import settings
+    assert isinstance(settings.tesseract_lang, str)
+    assert "kor" in settings.tesseract_lang
+
+def test_settings_has_confidence_thresholds():
+    """confidence_thresholds가 Settings에 존재하고 4개 키를 포함하는지 확인."""
+    from app.core.config import settings
+    ct = settings.confidence_thresholds
+    assert ct["high"] == 80
+    assert ct["medium"] == 60
+    assert ct["low"] == 40
+    assert ct["very_low"] == 0

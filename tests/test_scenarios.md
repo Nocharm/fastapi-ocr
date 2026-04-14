@@ -1,7 +1,12 @@
 # OCR API 테스트 시나리오
 
 > 각 시나리오는 `tests/test_ocr.py`의 대응 테스트 함수와 매핑된다.
-> 결과 칸은 테스트 실행 후 직접 기록한다.
+> 코드 변경 시 이 파일도 함께 업데이트해야 한다.
+>
+> **[변경 이력]**
+> - EasyOCR 제거에 따라 TC-02(고품질 이미지), TC-03(저품질 이미지),
+>   TC-04(이미지 포맷) 삭제.
+> - TC-02N 추가: 이미지 업로드 시 HTTP 501 반환 검증 (VLM 미구현).
 
 ---
 
@@ -24,6 +29,7 @@
 |---|---|
 | 대응 함수 | `test_health_check` |
 | 목적 | 서버가 정상적으로 실행 중인지 확인 |
+| 비고 | Docker HEALTHCHECK, 모니터링 도구가 주기적으로 호출 |
 
 **요청**
 ```
@@ -42,81 +48,30 @@ HTTP 200
 
 ## 2. 이미지 OCR
 
-### TC-02 고품질 이미지 업로드 (신뢰도 high)
+### TC-02N 이미지 업로드 — VLM 미구현 (HTTP 501)
 
 | 항목 | 내용 |
 |---|---|
-| 대응 함수 | `test_image_high_quality` |
-| 목적 | 선명한 이미지에서 텍스트 추출 후 응답 구조 검증 |
-| 전제 조건 | EasyOCR 모델이 mock 처리됨 |
+| 대응 함수 | `test_image_upload_not_implemented` |
+| 목적 | EasyOCR 제거 후 이미지 요청 시 501이 반환되는지 확인 |
+| 비고 | VLM 서비스 구현 완료 시 이 TC를 HTTP 200 검증으로 교체 |
 
 **요청**
 ```
 POST /ocr/upload
 Content-Type: multipart/form-data
-file: white_background_black_text.png
+file: test.png (image/png)
 ```
 
 **기대 결과**
 ```json
-HTTP 200
-{
-  "filename": "test_high.png",
-  "pages": [
-    {
-      "page_num": 0,
-      "text": "Hello OCR",
-      "method": "ocr",
-      "confidence": 95.0,
-      "quality_flag": "high",
-      "success": true
-    }
-  ],
-  "total": 1,
-  "success_count": 1,
-  "failed_pages": []
-}
+HTTP 501
+{ "detail": "...VLM..." }
 ```
 
 **확인 포인트**
-- `pages` 배열 길이 = 1
-- `quality_flag` = `"high"`
-- `failed_pages` = `[]`
-
-**실행 결과** `[ ]` 통과 / `[ ]` 실패
-
----
-
-### TC-03 저품질 이미지 업로드 (신뢰도 low)
-
-| 항목 | 내용 |
-|---|---|
-| 대응 함수 | `test_image_low_quality` |
-| 목적 | 흐릿한 이미지에서 낮은 신뢰도로 결과가 반환되는지 확인 |
-
-**기대 결과**
-- `quality_flag` = `"low"` 또는 `"very_low"`
-- `success` = `true` (결과가 나쁘더라도 에러가 아님)
-
-**실행 결과** `[ ]` 통과 / `[ ]` 실패
-
----
-
-### TC-04 지원 이미지 형식 전체 확인
-
-| 항목 | 내용 |
-|---|---|
-| 대응 함수 | `test_image_formats` |
-| 목적 | jpeg, png, webp, tiff 모두 200 응답을 반환하는지 확인 |
-
-**확인 형식**
-
-| MIME 타입 | 기대 상태 코드 |
-|---|---|
-| `image/jpeg` | 200 |
-| `image/png` | 200 |
-| `image/webp` | 200 |
-| `image/tiff` | 200 |
+- 상태 코드 = `501`
+- `detail` 메시지에 `"VLM"` 포함 (클라이언트에게 교체 예정임을 안내)
 
 **실행 결과** `[ ]` 통과 / `[ ]` 실패
 
@@ -134,6 +89,7 @@ HTTP 200
 
 **기대 결과**
 ```json
+HTTP 200
 {
   "pages": [{ "method": "direct", "confidence": null, "quality_flag": "" }]
 }
@@ -142,6 +98,7 @@ HTTP 200
 **확인 포인트**
 - `method` = `"direct"`
 - `confidence` = `null` (OCR을 거치지 않아 신뢰도 없음)
+- `quality_flag` = `""` (직접 추출은 등급 없음)
 
 **실행 결과** `[ ]` 통과 / `[ ]` 실패
 
@@ -157,6 +114,7 @@ HTTP 200
 
 **기대 결과**
 ```json
+HTTP 200
 {
   "pages": [{ "method": "ocr", "confidence": 72.4, "quality_flag": "medium" }]
 }
@@ -180,6 +138,7 @@ HTTP 200
 
 **기대 결과**
 ```json
+HTTP 200
 {
   "pages": [
     { "page_num": 0, "method": "direct" },
@@ -207,7 +166,7 @@ HTTP 200
 
 **기대 결과**
 - `pages[n].tables` 배열에 마크다운 표 문자열 포함
-- 마크다운 형식: `| col1 | col2 |\n|---|---|\n| val | val |`
+- 마크다운 형식: `| col1 | col2 |\n| --- | --- |\n| val | val |`
 
 **실행 결과** `[ ]` 통과 / `[ ]` 실패
 
@@ -287,6 +246,7 @@ HTTP 413
 
 **기대 결과**
 ```json
+HTTP 200
 {
   "total": 3,
   "success_count": 2,
@@ -334,7 +294,7 @@ HTTP 413
 
 | 항목 | 내용 |
 |---|---|
-| 대응 함수 | `test_table_to_markdown` |
+| 대응 함수 | `test_table_to_markdown`, `test_table_to_markdown_empty` |
 | 목적 | pdfplumber 테이블 데이터가 올바른 마크다운 표로 변환되는지 확인 |
 
 **입력**
@@ -350,6 +310,10 @@ HTTP 413
 | 김철수 | 25 |
 ```
 
+**빈 입력 케이스**
+- `[]` → `""`
+- `[[]]` → `""`
+
 **실행 결과** `[ ]` 통과 / `[ ]` 실패
 
 ---
@@ -363,6 +327,6 @@ pytest tests/ -v
 # 특정 테스트만
 pytest tests/test_ocr.py::test_health_check -v
 
-# 커버리지 포함
+# 짧은 트레이스백으로 실행
 pytest tests/ -v --tb=short
 ```

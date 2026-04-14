@@ -1,6 +1,10 @@
 # OCR API
 
-이미지와 PDF 파일에서 텍스트와 표를 추출해 페이지별 구조화된 JSON으로 반환하는 FastAPI 기반 OCR 서버입니다.
+PDF 파일에서 텍스트와 표를 추출해 페이지별 구조화된 JSON으로 반환하는 FastAPI 기반 OCR 서버입니다.
+
+> **이미지 OCR (VLM 연동 예정)**
+> EasyOCR이 제거되었습니다. 이미지 파일(JPEG/PNG/WebP/TIFF) 업로드 시 `HTTP 501`을 반환하며,
+> VLM(Vision Language Model) 기반 이미지 OCR로 교체 예정입니다.
 
 ---
 
@@ -10,7 +14,7 @@
 |---|---|
 | 웹 프레임워크 | [FastAPI](https://fastapi.tiangolo.com/) |
 | 웹 서버 | [Uvicorn](https://www.uvicorn.org/) |
-| 이미지 OCR | [EasyOCR](https://github.com/JaidedAI/EasyOCR) |
+| 이미지 OCR | VLM 연동 예정 (EasyOCR 제거됨) |
 | PDF 텍스트 직접 추출 | [pdfplumber](https://github.com/jsvine/pdfplumber) |
 | PDF 스캔 이미지 OCR | [Tesseract](https://github.com/tesseract-ocr/tesseract) + [pdf2image](https://github.com/Belval/pdf2image) |
 | 이미지 전처리 | [OpenCV](https://opencv.org/) |
@@ -24,7 +28,7 @@
 ```
 업로드된 파일
 ├── 이미지 (JPEG / PNG / WebP / TIFF)
-│   └── EasyOCR → 텍스트 + 신뢰도 반환
+│   └── HTTP 501 반환 (VLM 연동 예정)
 │
 └── PDF
     └── 페이지별 독립 판단
@@ -50,18 +54,21 @@ FastAPI_Project/
 │   ├── core/
 │   │   └── config.py                # 환경변수 및 상수 (신뢰도 등급, Tesseract 옵션)
 │   ├── services/
-│   │   ├── easyocr_service.py       # 이미지 OCR 처리 (EasyOCR)
 │   │   └── extractor.py             # PDF 처리 (pdfplumber + Tesseract 하이브리드)
 │   └── schemas/
 │       └── ocr.py                   # PageResult, OCRResponse 데이터 구조
 ├── tests/
-│   ├── test_ocr.py                  # TC-01 ~ TC-14 자동화 테스트
+│   ├── test_ocr.py                  # 자동화 테스트 (TC-01 ~ TC-14)
 │   └── test_scenarios.md            # 테스트 시나리오 명세
+├── docs/
+│   └── superpowers/specs/           # 설계 문서 (변경 이력 포함)
 ├── uploads/                         # 업로드 파일 저장 (git 추적 제외)
 ├── temp/                            # PDF 임시 파일 저장 (git 추적 제외)
+├── CLAUDE.md                        # Claude Code 작업 규칙
 ├── Dockerfile
 ├── docker-compose.yml
-├── requirements.txt
+├── requirements.txt                 # 프로덕션 의존성
+├── requirements-dev.txt             # 개발/테스트 의존성
 └── .env                             # 환경변수 설정 (git 추적 제외)
 ```
 
@@ -100,14 +107,16 @@ source .venv/bin/activate        # macOS / Linux
 
 **2. 패키지 설치**
 
-torch/torchvision은 CPU 전용 버전을 먼저 설치해야 합니다. (그렇지 않으면 CUDA 버전 ~2 GB가 설치됩니다.)
-
 ```bash
-pip install torch==2.2.2 torchvision==0.17.2 \
-    --index-url https://download.pytorch.org/whl/cpu
-
+# 프로덕션 의존성만 설치
 pip install -r requirements.txt
+
+# 개발/테스트 포함 전체 설치
+pip install -r requirements-dev.txt
 ```
+
+> EasyOCR 제거로 torch/torchvision이 더 이상 필요하지 않습니다.
+> CPU 전용 인덱스 별도 지정 없이 바로 설치할 수 있습니다.
 
 **3. 환경변수 설정**
 
@@ -116,7 +125,6 @@ pip install -r requirements.txt
 ```env
 UPLOAD_DIR=uploads
 TEMP_DIR=temp
-EASYOCR_LANGUAGES=["en","ko"]
 OCR_TEXT_THRESHOLD=50
 OCR_MAX_WORKERS=4
 OCR_WORD_CONF_MIN=30
@@ -142,6 +150,7 @@ uvicorn app.main:app --reload
 ### Docker 실행
 
 Dockerfile에 BuildKit 캐시 마운트가 적용되어 있으므로 재빌드 시 apt/pip 캐시를 재사용합니다.
+EasyOCR 제거로 torch 설치 단계와 모델 사전 다운로드 단계가 없어져 빌드 시간이 크게 단축됩니다.
 
 **1. 이미지 빌드 및 컨테이너 실행**
 
@@ -161,8 +170,6 @@ docker-compose up --build -d
 docker-compose down
 ```
 
-> Docker 이미지 빌드 시 EasyOCR 모델이 이미지에 포함되어 콜드 스타트 없이 바로 서비스됩니다.
-
 ---
 
 ## API 사용법
@@ -173,21 +180,17 @@ docker-compose down
 
 **지원 파일 형식 및 최대 크기**
 
-| 형식 | MIME 타입 | 최대 크기 |
-|---|---|---|
-| JPEG | `image/jpeg` | 50 MB |
-| PNG | `image/png` | 50 MB |
-| WebP | `image/webp` | 50 MB |
-| TIFF | `image/tiff` | 50 MB |
-| PDF | `application/pdf` | 50 MB |
+| 형식 | MIME 타입 | 최대 크기 | 상태 |
+|---|---|---|---|
+| PDF | `application/pdf` | 50 MB | 지원 |
+| JPEG | `image/jpeg` | 50 MB | 구현 예정 (VLM) |
+| PNG | `image/png` | 50 MB | 구현 예정 (VLM) |
+| WebP | `image/webp` | 50 MB | 구현 예정 (VLM) |
+| TIFF | `image/tiff` | 50 MB | 구현 예정 (VLM) |
 
 **요청 예시 (curl)**
 
 ```bash
-# 이미지 파일
-curl -X POST http://localhost:8000/ocr/upload \
-  -F "file=@sample.png"
-
 # PDF 파일
 curl -X POST http://localhost:8000/ocr/upload \
   -F "file=@document.pdf"
@@ -230,7 +233,7 @@ curl -X POST http://localhost:8000/ocr/upload \
 
 | 필드 | 설명 |
 |---|---|
-| `method` | `"direct"` = pdfplumber 직접 추출 / `"ocr"` = Tesseract 또는 EasyOCR |
+| `method` | `"direct"` = pdfplumber 직접 추출 / `"ocr"` = Tesseract OCR |
 | `confidence` | OCR 평균 신뢰도 (0~100). `direct` 방식은 `null` |
 | `quality_flag` | 신뢰도 등급. `direct` 방식은 빈 문자열 |
 | `failed_pages` | 처리 실패 페이지 번호 목록 (일부 실패해도 HTTP 200 반환) |
@@ -251,6 +254,7 @@ curl -X POST http://localhost:8000/ocr/upload \
 | `413` | 파일 크기 50 MB 초과 |
 | `415` | 지원하지 않는 파일 형식 |
 | `422` | 파일 없이 요청한 경우 |
+| `501` | 이미지 업로드 (VLM 미구현) |
 
 ---
 
@@ -271,13 +275,17 @@ curl http://localhost:8000/health
 ## 테스트
 
 ```bash
+# 전체 테스트
 pytest tests/ -v
+
+# 특정 테스트만
+pytest tests/test_ocr.py::test_health_check -v
 ```
 
 | 테스트 | 내용 |
 |---|---|
 | TC-01 | 헬스체크 |
-| TC-02~04 | 이미지 OCR (품질 등급, 포맷 4종) |
+| TC-02N | 이미지 업로드 → 501 (VLM 미구현) |
 | TC-05~08 | PDF 처리 (direct / ocr / 혼합 / 표 포함) |
 | TC-09~11 | 입력 유효성 검사 (415 / 422 / 413) |
 | TC-12 | 일부 페이지 실패 복구 |
@@ -291,7 +299,6 @@ pytest tests/ -v
 |---|---|---|
 | `UPLOAD_DIR` | `uploads` | 업로드 파일 저장 경로 |
 | `TEMP_DIR` | `temp` | PDF 임시 파일 저장 경로 |
-| `EASYOCR_LANGUAGES` | `["en","ko"]` | EasyOCR 인식 언어 목록 |
 | `OCR_TEXT_THRESHOLD` | `50` | 직접 추출 최소 글자 수 (미만이면 OCR 폴백) |
 | `OCR_MAX_WORKERS` | `4` | PDF 병렬 처리 스레드 수 |
 | `OCR_WORD_CONF_MIN` | `30` | Tesseract 단어 최소 신뢰도 (미만 단어 제외) |
@@ -301,14 +308,33 @@ pytest tests/ -v
 
 ## 코드 읽기 순서
 
-처음 코드를 파악할 때는 아래 순서로 읽으면 흐름을 따라가기 쉽습니다.
+처음 코드를 파악할 때는 아래 순서로 읽으면 요청 흐름을 따라가기 쉽습니다.
 
 ```
-1. app/schemas/ocr.py               # 데이터 구조 정의 (PageResult, OCRResponse)
-2. app/core/config.py               # 설정값 및 상수 관리
-3. app/main.py                      # 앱 진입점 및 라우터 등록
-4. app/api/routes/ocr.py            # HTTP 요청 수신 및 파일 타입 분기
-5. app/services/easyocr_service.py  # 이미지 OCR 처리
-6. app/services/extractor.py        # PDF 하이브리드 추출 (pdfplumber + Tesseract)
-7. tests/test_ocr.py                # 자동화 테스트 (TC-01~TC-14)
+1. app/schemas/ocr.py        → 데이터 구조 (PageResult, OCRResponse)
+2. app/core/config.py        → 설정값 및 상수
+3. app/main.py               → 앱 진입점, 라우터 등록
+4. app/api/routes/ocr.py     → HTTP 수신, 파일 타입 분기, 임시 파일 처리
+5. app/services/extractor.py → PDF 하이브리드 추출 (pdfplumber + Tesseract)
+6. tests/test_ocr.py         → 자동화 테스트
+```
+
+요청 흐름 요약:
+
+```
+POST /ocr/upload
+    │
+    ├─ 이미지 → HTTP 501 (VLM 예정)
+    │
+    └─ PDF
+         │  routes/ocr.py: 임시 파일 저장 → extract_parallel() 호출
+         │
+         └─ extractor.py (페이지별 독립 처리)
+                │
+                ├─ pdfplumber 텍스트 ≥ 50자
+                │       └─ method: "direct"  confidence: null
+                │
+                └─ 텍스트 < 50자
+                        └─ pdf2image → 전처리 → Tesseract
+                               └─ method: "ocr"  confidence: 0~100
 ```

@@ -383,3 +383,25 @@ def test_extract_image_vlm_engine_sets_method_vlm():
     with patch("app.services.extractor.run_ocr_with_fallback", return_value=vlm_result):
         result = extract_image(image)
     assert result["pages"][0]["method"] == "vlm"
+
+
+# --- Settings VLM 필드 검증 ---
+
+def test_settings_has_openai_api_key():
+    """openai_api_key가 Settings에 존재하고 str 타입인지 확인."""
+    from app.core.config import settings
+    assert isinstance(settings.openai_api_key, str)
+
+
+def test_settings_has_vlm_model():
+    """vlm_model이 Settings에 존재하고 비어있지 않은지 확인."""
+    from app.core.config import settings
+    assert isinstance(settings.vlm_model, str)
+    assert len(settings.vlm_model) > 0
+
+
+def test_settings_has_vlm_max_tokens():
+    """vlm_max_tokens가 Settings에 존재하고 양수인지 확인."""
+    from app.core.config import settings
+    assert isinstance(settings.vlm_max_tokens, int)
+    assert settings.vlm_max_tokens > 0

@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     # Tesseract quality_flag가 이 목록에 해당하면 VLM 재시도.
     # .env: VLM_FALLBACK_FLAGS=["very_low"]  (JSON 배열 형식 필수)
 
+    # --- VLM 설정 ---
+    openai_api_key: str = ""
+    # OpenAI API 키. 비어있으면 VLM 폴백을 건너뛰고 Tesseract 결과를 유지한다.
+
+    vlm_model: str = "gpt-4o"
+    # VLM 호출에 사용할 OpenAI 모델. gpt-4o-mini로 낮추면 비용 절감, 정확도 하락.
+
+    vlm_max_tokens: int = 1024
+    # VLM 응답 최대 토큰 수. OCR 결과가 잘리면 늘린다.
+
     # --- 비즈니스 로직 상수 ---
     confidence_thresholds: dict[str, int] = Field(
         default={"high": 80, "medium": 60, "low": 40, "very_low": 0},

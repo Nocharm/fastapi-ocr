@@ -306,14 +306,64 @@ def test_settings_has_vlm_fallback_flags():
     assert len(settings.vlm_fallback_flags) >= 1
 
 
-# --- VLM stub ---
+# --- run_vlm() 단위 테스트 ---
 
-def test_run_vlm_raises_not_implemented():
-    """run_vlm()은 로컬 모델 연동 전까지 NotImplementedError를 발생시켜야 한다."""
+def test_run_vlm_raises_not_implemented_without_api_key(monkeypatch):
+    """API 키 미설정 시 NotImplementedError → 호출부에서 Tesseract 결과 유지."""
+    from app.core import config as cfg
+    monkeypatch.setattr(cfg.settings, "openai_api_key", "")
     from app.services.vlm import run_vlm
     image = np.zeros((10, 10, 3), dtype=np.uint8)
     with pytest.raises(NotImplementedError):
         run_vlm(image)
+
+
+def test_get_vlm_confidence_zero():
+    """빈 텍스트 → confidence=0.0."""
+    from app.services.vlm import _get_vlm_confidence
+    assert _get_vlm_confidence("") == 0.0
+
+
+def test_get_vlm_confidence_half():
+    """250자 텍스트 → confidence=50.0 (상한 500자 기준)."""
+    from app.services.vlm import _get_vlm_confidence
+    assert _get_vlm_confidence("x" * 250) == 50.0
+
+
+def test_get_vlm_confidence_max():
+    """500자 이상 텍스트 → confidence=100.0 (상한 초과 시 고정)."""
+    from app.services.vlm import _get_vlm_confidence
+    assert _get_vlm_confidence("x" * 600) == 100.0
+
+
+def test_run_vlm_returns_correct_structure(monkeypatch):
+    """API 키 설정 + mock 응답 → {"text", "confidence", "quality_flag"} 구조 반환."""
+    from unittest.mock import MagicMock, patch
+    from app.core import config as cfg
+    monkeypatch.setattr(cfg.settings, "openai_api_key", "test-key")
+    monkeypatch.setattr(cfg.settings, "vlm_model", "gpt-4o")
+    monkeypatch.setattr(cfg.settings, "vlm_max_tokens", 1024)
+
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "x" * 400  # 400자 → confidence=80.0, flag="high"
+
+    from app.services.vlm import run_vlm
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+
+    with patch("openai.OpenAI") as mock_openai_cls:
+        # openai.OpenAI를 패치해야 함수 내부 lazy import에서도 mock이 적용된다.
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = mock_response
+
+        result = run_vlm(image)
+
+    assert "text" in result
+    assert "confidence" in result
+    assert "quality_flag" in result
+    assert result["text"] == "x" * 400
+    assert result["confidence"] == 80.0
+    assert result["quality_flag"] == "high"
 
 
 # --- run_ocr_with_fallback 단위 테스트 ---

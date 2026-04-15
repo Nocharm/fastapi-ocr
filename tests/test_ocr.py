@@ -406,6 +406,18 @@ def test_run_ocr_with_fallback_vlm_not_implemented():
     assert result["text"] == "fallback"
 
 
+def test_run_ocr_with_fallback_api_error_falls_back_to_tesseract():
+    """run_vlm()이 API 오류(NotImplementedError 아닌 예외)를 던져도 Tesseract 결과 반환."""
+    from app.services.extractor import run_ocr_with_fallback
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    tesseract_result = {"text": "fallback", "confidence": 10.0, "quality_flag": "very_low"}
+    with patch("app.services.extractor.run_ocr", return_value=tesseract_result), \
+         patch("app.services.extractor.run_vlm", side_effect=RuntimeError("API error")):
+        result = run_ocr_with_fallback(image)
+    assert result["engine"] == "tesseract"
+    assert result["text"] == "fallback"
+
+
 # --- extract_image 단위 테스트 ---
 
 def test_extract_image_returns_ocr_response_format():

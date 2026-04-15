@@ -174,7 +174,7 @@ def _get_quality_flag(avg_conf: float) -> str:
 def run_ocr_with_fallback(image: np.ndarray) -> dict:
     """Tesseract 먼저 시도. quality_flag가 vlm_fallback_flags에 해당하면 VLM 재시도.
 
-    VLM 미구현(NotImplementedError) 시 Tesseract 결과를 그대로 반환.
+    VLM 실패(API 오류, 미구현 등) 시 Tesseract 결과를 그대로 반환.
 
     Returns:
         run_ocr() / run_vlm() 반환값에 "engine" 키 추가:
@@ -187,7 +187,8 @@ def run_ocr_with_fallback(image: np.ndarray) -> dict:
             vlm_result = run_vlm(image)
             vlm_result["engine"] = "vlm"
             return vlm_result
-        except NotImplementedError:
+        except Exception:
+            # NotImplementedError(API 키 미설정)뿐 아니라 API 오류도 Tesseract 결과로 폴백한다.
             pass
     return result
 

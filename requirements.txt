@@ -35,6 +35,9 @@ numpy==1.26.4               # numpy 2.x는 현재 스택과 호환 안 됨 — 1
 # Tesseract 바이너리는 Dockerfile에서 apt-get으로 설치된다.
 pytesseract==0.3.13
 
+# --- VLM (GPT-4V) ---
+openai>=1.30.0              # OpenAI Python SDK. GPT-4V API 호출에 사용.
+
 # --- 데이터 처리 ---
 pandas==2.2.2                # Tesseract image_to_data() 출력 처리에 사용
 

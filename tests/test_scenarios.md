@@ -6,7 +6,9 @@
 > **[변경 이력]**
 > - EasyOCR 제거에 따라 TC-02(고품질 이미지), TC-03(저품질 이미지),
 >   TC-04(이미지 포맷) 삭제.
-> - TC-02N 추가: 이미지 업로드 시 HTTP 501 반환 검증 (VLM 미구현).
+> - TC-02N 추가 후 삭제: 이미지 업로드 시 HTTP 501 반환 검증.
+> - TC-02 재추가: Tesseract+VLM 폴백 파이프라인으로 이미지 처리 구현.
+> - TC-02E 추가: 손상된 이미지 파일 → 422 검증.
 
 ---
 
@@ -48,13 +50,13 @@ HTTP 200
 
 ## 2. 이미지 OCR
 
-### TC-02N 이미지 업로드 — VLM 미구현 (HTTP 501)
+### TC-02 이미지 업로드 — OCR 처리
 
 | 항목 | 내용 |
 |---|---|
-| 대응 함수 | `test_image_upload_not_implemented` |
-| 목적 | EasyOCR 제거 후 이미지 요청 시 501이 반환되는지 확인 |
-| 비고 | VLM 서비스 구현 완료 시 이 TC를 HTTP 200 검증으로 교체 |
+| 대응 함수 | `test_image_upload_ocr` |
+| 목적 | 이미지 업로드 시 Tesseract → VLM 폴백 파이프라인이 동작하는지 확인 |
+| 비고 | VLM 미구현 시 Tesseract 결과 반환. method = "ocr" 또는 "vlm" |
 
 **요청**
 ```
@@ -65,13 +67,42 @@ file: test.png (image/png)
 
 **기대 결과**
 ```json
-HTTP 501
-{ "detail": "...VLM..." }
+HTTP 200
+{
+  "pages": [{ "page_num": 0, "method": "ocr", "confidence": 72.0 }],
+  "total": 1,
+  "success_count": 1
+}
 ```
 
 **확인 포인트**
-- 상태 코드 = `501`
-- `detail` 메시지에 `"VLM"` 포함 (클라이언트에게 교체 예정임을 안내)
+- 상태 코드 = `200`
+- `method` = `"ocr"` 또는 `"vlm"`
+- `page_num` = `0` (이미지는 단일 페이지)
+
+**실행 결과** `[ ]` 통과 / `[ ]` 실패
+
+---
+
+### TC-02E 이미지 업로드 — 손상된 파일
+
+| 항목 | 내용 |
+|---|---|
+| 대응 함수 | `test_image_upload_invalid_bytes` |
+| 목적 | 디코딩 불가한 bytes 전송 시 422 반환 확인 |
+
+**요청**
+```
+POST /ocr/upload
+Content-Type: multipart/form-data
+file: broken.png (image/png, 내용: b"not_an_image")
+```
+
+**기대 결과**
+```json
+HTTP 422
+{ "detail": "Invalid image file: unable to decode." }
+```
 
 **실행 결과** `[ ]` 통과 / `[ ]` 실패
 

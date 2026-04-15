@@ -19,7 +19,7 @@ class PageResult:
     tables:       list[str]       = field(default_factory=list)
 
     method:       str             = ""
-    # "direct": pdfplumber 직접 추출 / "ocr": Tesseract OCR
+    # "direct": pdfplumber 직접 추출 / "ocr": Tesseract OCR / "vlm": VLM 엔진
 
     confidence:   Optional[float] = None
     # OCR 평균 신뢰도 (0~100). method="direct"이면 None.

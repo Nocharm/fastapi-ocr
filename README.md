@@ -2,10 +2,6 @@
 
 PDF 파일에서 텍스트와 표를 추출해 페이지별 구조화된 JSON으로 반환하는 FastAPI 기반 OCR 서버입니다.
 
-> **이미지 OCR (VLM 연동 예정)**
-> EasyOCR이 제거되었습니다. 이미지 파일(JPEG/PNG/WebP/TIFF) 업로드 시 `HTTP 501`을 반환하며,
-> VLM(Vision Language Model) 기반 이미지 OCR로 교체 예정입니다.
-
 ---
 
 ## 기술 스택
@@ -14,7 +10,7 @@ PDF 파일에서 텍스트와 표를 추출해 페이지별 구조화된 JSON으
 |---|---|
 | 웹 프레임워크 | [FastAPI](https://fastapi.tiangolo.com/) |
 | 웹 서버 | [Uvicorn](https://www.uvicorn.org/) |
-| 이미지 OCR | VLM 연동 예정 (EasyOCR 제거됨) |
+| 이미지 OCR | Tesseract + VLM 폴백 (로컬 모델 연동 예정) |
 | PDF 텍스트 직접 추출 | [pdfplumber](https://github.com/jsvine/pdfplumber) |
 | PDF 스캔 이미지 OCR | [Tesseract](https://github.com/tesseract-ocr/tesseract) + [pdf2image](https://github.com/Belval/pdf2image) |
 | 이미지 전처리 | [OpenCV](https://opencv.org/) |
@@ -28,12 +24,17 @@ PDF 파일에서 텍스트와 표를 추출해 페이지별 구조화된 JSON으
 ```
 업로드된 파일
 ├── 이미지 (JPEG / PNG / WebP / TIFF)
-│   └── HTTP 501 반환 (VLM 연동 예정)
+│   └── run_ocr_with_fallback()
+│       ├── Tesseract 신뢰도 충분  →  method: "ocr"
+│       └── 신뢰도 very_low       →  VLM 재시도 → method: "vlm"
+│                                      (VLM 미구현 시 Tesseract 결과 유지)
 │
 └── PDF
     └── 페이지별 독립 판단
         ├── 텍스트 레이어 ≥ 50자  →  pdfplumber 직접 추출 (method: "direct")
-        └── 텍스트 레이어 < 50자  →  pdf2image + Tesseract OCR 폴백 (method: "ocr")
+        └── 텍스트 레이어 < 50자  →  run_ocr_with_fallback()
+                                      ├── Tesseract 신뢰도 충분  →  method: "ocr"
+                                      └── 신뢰도 very_low       →  VLM 재시도 → method: "vlm"
 ```
 
 - 한 페이지가 `direct`여도 다른 페이지는 독립적으로 `ocr` 방식을 사용할 수 있습니다.
@@ -141,9 +142,9 @@ uvicorn app.main:app --reload
 
 | 주소 | 설명 |
 |---|---|
-| http://localhost:8000 | API 서버 |
-| http://localhost:8000/docs | Swagger UI (API 문서 + 테스트) |
-| http://localhost:8000/health | 서버 상태 확인 |
+| http://localhost:8900 | API 서버 |
+| http://localhost:8900/docs | Swagger UI (API 문서 + 테스트) |
+| http://localhost:8900/health | 서버 상태 확인 |
 
 ---
 
@@ -192,7 +193,7 @@ docker-compose down
 
 ```bash
 # PDF 파일
-curl -X POST http://localhost:8000/ocr/upload \
+curl -X POST http://localhost:8900/ocr/upload \
   -F "file=@document.pdf"
 ```
 
@@ -263,7 +264,7 @@ curl -X POST http://localhost:8000/ocr/upload \
 서버 상태를 확인합니다.
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8900/health
 ```
 
 ```json

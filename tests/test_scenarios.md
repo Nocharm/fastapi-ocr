@@ -20,6 +20,7 @@
 4. [입력 유효성 검사](#4-입력-유효성-검사)
 5. [에러 복구](#5-에러-복구)
 6. [OCR 품질 등급](#6-ocr-품질-등급)
+7. [VLM 폴백](#7-vlm-폴백)
 
 ---
 
@@ -344,6 +345,71 @@ HTTP 200
 **빈 입력 케이스**
 - `[]` → `""`
 - `[[]]` → `""`
+
+**실행 결과** `[ ]` 통과 / `[ ]` 실패
+
+---
+
+## 7. VLM 폴백
+
+### TC-15 VLM 폴백 — API 키 미설정
+
+| 항목 | 내용 |
+|---|---|
+| 대응 함수 | `test_run_vlm_raises_not_implemented_without_api_key` |
+| 목적 | OPENAI_API_KEY 미설정 시 NotImplementedError → Tesseract 결과 유지 |
+
+**기대 결과**
+- `run_vlm()` 호출 시 `NotImplementedError` 발생
+
+**실행 결과** `[ ]` 통과 / `[ ]` 실패
+
+---
+
+### TC-16 VLM 폴백 — API 오류
+
+| 항목 | 내용 |
+|---|---|
+| 대응 함수 | `test_run_ocr_with_fallback_api_error_falls_back_to_tesseract` |
+| 목적 | API 오류(RuntimeError 등) 발생 시 Tesseract 결과로 폴백 |
+
+**기대 결과**
+- `result["engine"]` = `"tesseract"`
+- `result["text"]` = Tesseract 결과
+
+**실행 결과** `[ ]` 통과 / `[ ]` 실패
+
+---
+
+### TC-17 VLM 신뢰도 휴리스틱
+
+| 항목 | 내용 |
+|---|---|
+| 대응 함수 | `test_get_vlm_confidence_zero`, `test_get_vlm_confidence_half`, `test_get_vlm_confidence_max` |
+| 목적 | 텍스트 길이 → confidence 선형 매핑 검증 |
+
+**기대 결과**
+
+| 텍스트 길이 | confidence |
+|---|---|
+| 0자 | 0.0 |
+| 250자 | 50.0 |
+| 500자+ | 100.0 |
+
+**실행 결과** `[ ]` 통과 / `[ ]` 실패
+
+---
+
+### TC-18 VLM 결과 구조 검증
+
+| 항목 | 내용 |
+|---|---|
+| 대응 함수 | `test_run_vlm_returns_correct_structure` |
+| 목적 | run_vlm()이 run_ocr()과 동일한 키 구조를 반환하는지 확인 |
+
+**기대 결과**
+- `{"text": str, "confidence": float, "quality_flag": str}` 키 존재
+- 400자 텍스트 → confidence=80.0, quality_flag="high"
 
 **실행 결과** `[ ]` 통과 / `[ ]` 실패
 

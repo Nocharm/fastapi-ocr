@@ -10,7 +10,7 @@ PDF 파일에서 텍스트와 표를 추출해 페이지별 구조화된 JSON으
 |---|---|
 | 웹 프레임워크 | [FastAPI](https://fastapi.tiangolo.com/) |
 | 웹 서버 | [Uvicorn](https://www.uvicorn.org/) |
-| 이미지 OCR | Tesseract + VLM 폴백 (로컬 모델 연동 예정) |
+| 이미지 OCR | Tesseract + GPT-4V 폴백 (OpenAI API) |
 | PDF 텍스트 직접 추출 | [pdfplumber](https://github.com/jsvine/pdfplumber) |
 | PDF 스캔 이미지 OCR | [Tesseract](https://github.com/tesseract-ocr/tesseract) + [pdf2image](https://github.com/Belval/pdf2image) |
 | 이미지 전처리 | [OpenCV](https://opencv.org/) |
@@ -184,10 +184,10 @@ docker-compose down
 | 형식 | MIME 타입 | 최대 크기 | 상태 |
 |---|---|---|---|
 | PDF | `application/pdf` | 50 MB | 지원 |
-| JPEG | `image/jpeg` | 50 MB | 구현 예정 (VLM) |
-| PNG | `image/png` | 50 MB | 구현 예정 (VLM) |
-| WebP | `image/webp` | 50 MB | 구현 예정 (VLM) |
-| TIFF | `image/tiff` | 50 MB | 구현 예정 (VLM) |
+| JPEG | `image/jpeg` | 50 MB | Tesseract + VLM 폴백 |
+| PNG  | `image/png`  | 50 MB | Tesseract + VLM 폴백 |
+| WebP | `image/webp` | 50 MB | Tesseract + VLM 폴백 |
+| TIFF | `image/tiff` | 50 MB | Tesseract + VLM 폴백 |
 
 **요청 예시 (curl)**
 
@@ -255,7 +255,6 @@ curl -X POST http://localhost:8900/ocr/upload \
 | `413` | 파일 크기 50 MB 초과 |
 | `415` | 지원하지 않는 파일 형식 |
 | `422` | 파일 없이 요청한 경우 |
-| `501` | 이미지 업로드 (VLM 미구현) |
 
 ---
 
@@ -286,7 +285,7 @@ pytest tests/test_ocr.py::test_health_check -v
 | 테스트 | 내용 |
 |---|---|
 | TC-01 | 헬스체크 |
-| TC-02N | 이미지 업로드 → 501 (VLM 미구현) |
+| TC-02, TC-02E | 이미지 업로드 (Tesseract + VLM 폴백 / 손상 파일 422) |
 | TC-05~08 | PDF 처리 (direct / ocr / 혼합 / 표 포함) |
 | TC-09~11 | 입력 유효성 검사 (415 / 422 / 413) |
 | TC-12 | 일부 페이지 실패 복구 |
@@ -304,6 +303,10 @@ pytest tests/test_ocr.py::test_health_check -v
 | `OCR_MAX_WORKERS` | `4` | PDF 병렬 처리 스레드 수 |
 | `OCR_WORD_CONF_MIN` | `30` | Tesseract 단어 최소 신뢰도 (미만 단어 제외) |
 | `TESSERACT_CMD` | `` | Tesseract 실행 파일 경로 (비어있으면 PATH 자동 탐색) |
+| `OPENAI_API_KEY` | `` | OpenAI API 키. 비어있으면 VLM 폴백 비활성화, Tesseract 결과 유지 |
+| `VLM_MODEL` | `gpt-4o` | VLM 호출 모델. `gpt-4o-mini`로 낮추면 비용 절감 |
+| `VLM_MAX_TOKENS` | `1024` | VLM 응답 최대 토큰 수 |
+| `VLM_FALLBACK_FLAGS` | `["very_low"]` | 이 등급일 때 VLM 재시도. JSON 배열 형식 필수 |
 
 ---
 
@@ -325,7 +328,10 @@ pytest tests/test_ocr.py::test_health_check -v
 ```
 POST /ocr/upload
     │
-    ├─ 이미지 → HTTP 501 (VLM 예정)
+    ├─ 이미지 → run_ocr_with_fallback()
+    │         ├─ Tesseract 신뢰도 충분  →  method: "ocr"
+    │         └─ 신뢰도 very_low       →  GPT-4V 재시도 → method: "vlm"
+    │                                      (API 키 없거나 오류 시 Tesseract 유지)
     │
     └─ PDF
          │  routes/ocr.py: 임시 파일 저장 → extract_parallel() 호출
@@ -337,5 +343,6 @@ POST /ocr/upload
                 │
                 └─ 텍스트 < 50자
                         └─ pdf2image → 전처리 → Tesseract
-                               └─ method: "ocr"  confidence: 0~100
+                               ├─ 신뢰도 충분  →  method: "ocr"
+                               └─ very_low   →  GPT-4V → method: "vlm"
 ```

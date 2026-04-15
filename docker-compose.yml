@@ -2,10 +2,13 @@ services:
   api:
     build: .
     ports:
-      - "8000:8000"
+      - "${PORT:-8900}:${PORT:-8900}"
     volumes:
       - ./uploads:/app/uploads
       - ./temp:/app/temp
     env_file:
       - .env
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # .env에서 자동으로 읽히지만 명시해 컨테이너에 전달됨을 문서화한다.
     restart: unless-stopped

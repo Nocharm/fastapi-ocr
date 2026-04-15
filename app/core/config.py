@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     tesseract_lang: str = "kor+eng"
     # 인식 언어. 추가 언어는 tesseract-ocr-<lang> 패키지 설치 필요.
 
+    vlm_fallback_flags: list[str] = ["very_low"]
+    # Tesseract quality_flag가 이 목록에 해당하면 VLM 재시도.
+    # .env: VLM_FALLBACK_FLAGS=["very_low"]  (JSON 배열 형식 필수)
+
     # --- 비즈니스 로직 상수 ---
     confidence_thresholds: dict[str, int] = Field(
         default={"high": 80, "medium": 60, "low": 40, "very_low": 0},

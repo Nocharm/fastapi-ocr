@@ -266,3 +266,11 @@ def test_settings_has_confidence_thresholds():
     assert ct["medium"] == 60
     assert ct["low"] == 40
     assert ct["very_low"] == 0
+
+
+def test_settings_has_vlm_fallback_flags():
+    """vlm_fallback_flags가 Settings에 존재하고 list[str]인지 확인."""
+    from app.core.config import settings
+    assert isinstance(settings.vlm_fallback_flags, list)
+    assert all(isinstance(f, str) for f in settings.vlm_fallback_flags)
+    assert len(settings.vlm_fallback_flags) >= 1

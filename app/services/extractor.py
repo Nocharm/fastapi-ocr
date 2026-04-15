@@ -27,6 +27,7 @@ from pytesseract import Output
 
 from app.core.config import settings
 from app.schemas.ocr import PageResult
+from app.services.vlm import run_vlm
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,27 @@ def _get_quality_flag(avg_conf: float) -> str:
     if avg_conf >= ct["medium"]: return "medium"
     if avg_conf >= ct["low"]:    return "low"
     return "very_low"
+
+
+def run_ocr_with_fallback(image: np.ndarray) -> dict:
+    """Tesseract 먼저 시도. quality_flag가 vlm_fallback_flags에 해당하면 VLM 재시도.
+
+    VLM 미구현(NotImplementedError) 시 Tesseract 결과를 그대로 반환.
+
+    Returns:
+        run_ocr() / run_vlm() 반환값에 "engine" 키 추가:
+        {"text": str, "confidence": float, "quality_flag": str, "engine": "tesseract"|"vlm"}
+    """
+    result = run_ocr(image)
+    result["engine"] = "tesseract"
+    if result["quality_flag"] in settings.vlm_fallback_flags:
+        try:
+            vlm_result = run_vlm(image)
+            vlm_result["engine"] = "vlm"
+            return vlm_result
+        except NotImplementedError:
+            pass
+    return result
 
 
 # --- 4. 테이블 추출 — 3단계 폴백 ---

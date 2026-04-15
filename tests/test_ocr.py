@@ -286,3 +286,43 @@ def test_run_vlm_raises_not_implemented():
     image = np.zeros((10, 10, 3), dtype=np.uint8)
     with pytest.raises(NotImplementedError):
         run_vlm(image)
+
+
+# --- run_ocr_with_fallback 단위 테스트 ---
+
+def test_run_ocr_with_fallback_high_confidence():
+    """신뢰도 높으면 Tesseract 결과 반환, VLM 호출 없음."""
+    from app.services.extractor import run_ocr_with_fallback
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    tesseract_result = {"text": "hello", "confidence": 85.0, "quality_flag": "high"}
+    with patch("app.services.extractor.run_ocr", return_value=tesseract_result) as mock_ocr, \
+         patch("app.services.extractor.run_vlm") as mock_vlm:
+        result = run_ocr_with_fallback(image)
+    assert result["engine"] == "tesseract"
+    assert result["text"] == "hello"
+    mock_vlm.assert_not_called()
+
+
+def test_run_ocr_with_fallback_vlm_escalation():
+    """quality_flag가 vlm_fallback_flags에 해당하면 VLM 결과 반환."""
+    from app.services.extractor import run_ocr_with_fallback
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    tesseract_result = {"text": "bad", "confidence": 10.0, "quality_flag": "very_low"}
+    vlm_result = {"text": "good", "confidence": 90.0, "quality_flag": "high"}
+    with patch("app.services.extractor.run_ocr", return_value=tesseract_result), \
+         patch("app.services.extractor.run_vlm", return_value=vlm_result):
+        result = run_ocr_with_fallback(image)
+    assert result["engine"] == "vlm"
+    assert result["text"] == "good"
+
+
+def test_run_ocr_with_fallback_vlm_not_implemented():
+    """VLM NotImplementedError 시 Tesseract 결과를 그대로 반환."""
+    from app.services.extractor import run_ocr_with_fallback
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    tesseract_result = {"text": "fallback", "confidence": 10.0, "quality_flag": "very_low"}
+    with patch("app.services.extractor.run_ocr", return_value=tesseract_result), \
+         patch("app.services.extractor.run_vlm", side_effect=NotImplementedError):
+        result = run_ocr_with_fallback(image)
+    assert result["engine"] == "tesseract"
+    assert result["text"] == "fallback"

@@ -59,7 +59,7 @@ FastAPI_Project/
 │   └── schemas/
 │       └── ocr.py                   # PageResult, OCRResponse 데이터 구조
 ├── tests/
-│   ├── test_ocr.py                  # 자동화 테스트 (TC-01 ~ TC-14)
+│   ├── test_ocr.py                  # 자동화 테스트 (TC-01 ~ TC-18)
 │   └── test_scenarios.md            # 테스트 시나리오 명세
 ├── docs/
 │   └── superpowers/specs/           # 설계 문서 (변경 이력 포함)
@@ -290,6 +290,7 @@ pytest tests/test_ocr.py::test_health_check -v
 | TC-09~11 | 입력 유효성 검사 (415 / 422 / 413) |
 | TC-12 | 일부 페이지 실패 복구 |
 | TC-13~14 | 내부 함수 단위 테스트 (신뢰도 분류, 마크다운 표 변환) |
+| TC-15~18 | VLM 폴백 (API 키 미설정 / API 오류 / 신뢰도 휴리스틱 / 결과 구조) |
 
 ---
 

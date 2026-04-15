@@ -25,6 +25,8 @@ import io
 from dataclasses import asdict
 from unittest.mock import patch
 
+import numpy as np
+import cv2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -274,3 +276,13 @@ def test_settings_has_vlm_fallback_flags():
     assert isinstance(settings.vlm_fallback_flags, list)
     assert all(isinstance(f, str) for f in settings.vlm_fallback_flags)
     assert len(settings.vlm_fallback_flags) >= 1
+
+
+# --- VLM stub ---
+
+def test_run_vlm_raises_not_implemented():
+    """run_vlm()은 로컬 모델 연동 전까지 NotImplementedError를 발생시켜야 한다."""
+    from app.services.vlm import run_vlm
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    with pytest.raises(NotImplementedError):
+        run_vlm(image)

@@ -295,7 +295,7 @@ def test_run_ocr_with_fallback_high_confidence():
     from app.services.extractor import run_ocr_with_fallback
     image = np.zeros((10, 10, 3), dtype=np.uint8)
     tesseract_result = {"text": "hello", "confidence": 85.0, "quality_flag": "high"}
-    with patch("app.services.extractor.run_ocr", return_value=tesseract_result) as mock_ocr, \
+    with patch("app.services.extractor.run_ocr", return_value=tesseract_result), \
          patch("app.services.extractor.run_vlm") as mock_vlm:
         result = run_ocr_with_fallback(image)
     assert result["engine"] == "tesseract"
@@ -326,3 +326,32 @@ def test_run_ocr_with_fallback_vlm_not_implemented():
         result = run_ocr_with_fallback(image)
     assert result["engine"] == "tesseract"
     assert result["text"] == "fallback"
+
+
+# --- extract_image 단위 테스트 ---
+
+def test_extract_image_returns_ocr_response_format():
+    """extract_image()가 extract_parallel()과 동일한 dict 구조를 반환한다."""
+    from app.services.extractor import extract_image
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    fallback_result = {"text": "test", "confidence": 72.0, "quality_flag": "medium", "engine": "tesseract"}
+    with patch("app.services.extractor.run_ocr_with_fallback", return_value=fallback_result):
+        result = extract_image(image)
+    assert "pages" in result
+    assert "total" in result
+    assert "success_count" in result
+    assert "failed_pages" in result
+    assert result["total"] == 1
+    assert result["pages"][0]["page_num"] == 0
+    assert result["pages"][0]["method"] == "ocr"
+    assert result["pages"][0]["success"] is True
+
+
+def test_extract_image_vlm_engine_sets_method_vlm():
+    """VLM 엔진 사용 시 method가 'vlm'으로 기록된다."""
+    from app.services.extractor import extract_image
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    vlm_result = {"text": "vlm text", "confidence": 90.0, "quality_flag": "high", "engine": "vlm"}
+    with patch("app.services.extractor.run_ocr_with_fallback", return_value=vlm_result):
+        result = extract_image(image)
+    assert result["pages"][0]["method"] == "vlm"

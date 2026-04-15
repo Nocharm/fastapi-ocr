@@ -59,14 +59,15 @@ def extract_page(page, page_num: int, pdf_path: str) -> PageResult:
 
     # 텍스트 부족 → 스캔 PDF로 판단 → OCR 폴백
     image      = _get_page_image(pdf_path, page_num)
-    ocr_result = run_ocr(image)
+    ocr_result = run_ocr_with_fallback(image)
     tables     = extract_tables(page, page_image=image)
+    method     = "vlm" if ocr_result["engine"] == "vlm" else "ocr"
 
     return PageResult(
         page_num=page_num,
         text=ocr_result["text"],
         tables=tables,
-        method="ocr",
+        method=method,
         confidence=ocr_result["confidence"],
         quality_flag=ocr_result["quality_flag"],
         success=True,
@@ -297,6 +298,24 @@ def _find_table_regions(image: np.ndarray) -> list[dict]:
             regions.append({"x": x, "y": y, "x2": x + cw, "y2": y + ch})
 
     return regions
+
+
+def extract_image(image: np.ndarray) -> dict:
+    """이미지 단건을 OCR 처리해 extract_parallel()과 동일한 형식으로 반환.
+
+    이미지는 단일 "페이지"로 간주해 page_num=0으로 고정한다.
+    """
+    result = run_ocr_with_fallback(image)
+    method = "vlm" if result["engine"] == "vlm" else "ocr"
+    page_result = PageResult(
+        page_num=0,
+        text=result["text"],
+        method=method,
+        confidence=result["confidence"],
+        quality_flag=result["quality_flag"],
+        success=True,
+    )
+    return _make_response([page_result])
 
 
 # --- 5. 순차 처리 ---

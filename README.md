@@ -258,6 +258,20 @@ curl -X POST http://localhost:8900/ocr/upload \
 
 ---
 
+### `GET /`
+
+API 안내 메시지를 반환합니다. `/docs`로 이동하면 Swagger UI를 볼 수 있습니다.
+
+```bash
+curl http://localhost:8900/
+```
+
+```json
+{ "message": "Welcome to the OCR API! Visit /docs for API documentation." }
+```
+
+---
+
 ### `GET /health`
 
 서버 상태를 확인합니다.

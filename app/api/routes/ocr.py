@@ -42,7 +42,7 @@ async def upload_file(file: UploadFile = File(...)):
             ),
         )
 
-    return OCRResponse(filename=file.filename, **result)
+    return OCRResponse(filename=file.filename or "", **result)
 
 
 async def _process_pdf(file: UploadFile) -> dict:

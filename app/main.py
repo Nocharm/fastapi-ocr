@@ -10,6 +10,10 @@ app = FastAPI(title="OCR API", version="0.1.0")
 # /ocr 접두사로 OCR 라우터 등록. 실제 경로: /ocr/upload
 app.include_router(ocr.router, prefix="/ocr", tags=["ocr"])
 
+@app.get("/", include_in_schema=False)
+def root():
+    """루트 엔드포인트. API 설명서로 리디렉션."""
+    return {"message": "Welcome to the OCR API! Visit /docs for API documentation."}
 
 @app.get("/health")
 def health_check():

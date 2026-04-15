@@ -5,7 +5,8 @@ API 동작을 자동으로 검증하는 테스트 코드.
 
 현재 테스트 시나리오 (상세 내용은 test_scenarios.md 참고):
   TC-01 : GET /health → 200
-  TC-02N: 이미지 업로드 → 501 (VLM 미구현)
+  TC-02 : 이미지 업로드 → 200
+  TC-02E: 이미지 디코딩 실패 → 422
   TC-05 : PDF 직접 추출 → method=direct
   TC-06 : PDF OCR 폴백  → method=ocr
   TC-07 : 혼합 PDF      → 페이지별 독립 method
@@ -54,16 +55,43 @@ def test_health_check():
     assert response.json() == {"status": "ok"}
 
 
-# --- TC-02N 이미지 업로드 (VLM 미구현) ---
+# --- TC-02 이미지 업로드 ---
 
-def test_image_upload_not_implemented():
-    """TC-02N: 이미지 업로드 → HTTP 501. VLM 구현 후 200 검증으로 교체 예정."""
+@pytest.fixture
+def image_bytes():
+    """유효한 10x10 PNG 바이트 (cv2.imdecode 테스트용)."""
+    img = np.zeros((10, 10, 3), dtype=np.uint8)
+    _, buf = cv2.imencode(".png", img)
+    return buf.tobytes()
+
+
+def test_image_upload_ocr(image_bytes):
+    """TC-02: 이미지 업로드 → HTTP 200, method='ocr' 또는 'vlm'."""
+    from dataclasses import asdict
+    mock_result = {
+        "pages": [asdict(PageResult(page_num=0, text="추출된 텍스트", method="ocr",
+                                    confidence=72.0, quality_flag="medium", success=True))],
+        "total": 1, "success_count": 1, "failed_pages": [],
+    }
+    with patch("app.api.routes.ocr.extract_image", return_value=mock_result):
+        response = client.post(
+            "/ocr/upload",
+            files={"file": ("test.png", image_bytes, "image/png")},
+        )
+    assert response.status_code == 200
+    page = response.json()["pages"][0]
+    assert page["method"] in ("ocr", "vlm")
+    assert page["success"] is True
+
+
+def test_image_upload_invalid_bytes():
+    """TC-02E: 디코딩 불가한 bytes → HTTP 422."""
     response = client.post(
         "/ocr/upload",
-        files={"file": ("test.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+        files={"file": ("broken.png", b"not_an_image", "image/png")},
     )
-    assert response.status_code == 501
-    assert "VLM" in response.json()["detail"]
+    assert response.status_code == 422
+    assert "Invalid image" in response.json()["detail"]
 
 
 # --- TC-05~08 PDF OCR ---

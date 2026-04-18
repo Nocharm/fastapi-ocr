@@ -1,10 +1,74 @@
-# CLAUDE.md — 프로젝트 작업 규칙
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 이 파일은 Claude Code가 이 프로젝트에서 코드를 수정할 때 반드시 따라야 할 규칙을 정의합니다.
 
 ---
 
-## 1. 네이밍 규칙
+## 1. 개발 명령어
+
+### 로컬 실행
+
+```bash
+# 가상환경
+python -m venv .venv && source .venv/bin/activate
+
+# 의존성 설치
+pip install -r requirements.txt          # 프로덕션만
+pip install -r requirements-dev.txt      # 개발/테스트 포함
+
+# 서버 실행
+uvicorn app.main:app --reload
+```
+
+서버: http://localhost:8900 / Swagger: http://localhost:8900/docs / 헬스체크: http://localhost:8900/health
+
+### Docker 실행
+
+```bash
+docker-compose up --build       # 포그라운드
+docker-compose up --build -d    # 백그라운드
+docker-compose down             # 중지
+```
+
+### 테스트
+
+```bash
+pytest tests/ -v                              # 전체 테스트
+pytest tests/test_ocr.py::test_health_check -v  # 단일 테스트
+```
+
+### 사전 요구사항
+
+- Python 3.11, Tesseract 5.x + 한국어 언어팩, poppler
+- macOS: `brew install tesseract tesseract-lang poppler`
+- Ubuntu: `apt-get install -y tesseract-ocr tesseract-ocr-kor tesseract-ocr-eng poppler-utils`
+
+---
+
+## 2. 프로젝트 구조 규칙
+
+```
+app/
+├── main.py              # 앱 진입점, 라우터 등록만 담당. 비즈니스 로직 금지.
+├── core/
+│   └── config.py        # 설정값과 상수만. 다른 app 모듈을 import하지 않는다.
+├── api/
+│   └── routes/          # HTTP 레이어. 검증 후 서비스로 위임. 직접 로직 금지.
+├── schemas/             # 데이터 구조 정의. Pydantic(응답) + dataclass(내부).
+└── services/            # 비즈니스 로직. 라우터/스키마를 알지만 routes는 모른다.
+```
+
+- 새 기능은 반드시 위 계층 구조를 따른다.
+- 서비스 함수는 항상 `PageResult` 또는 `OCRResponse` 호환 구조를 반환한다.
+- 설정값은 코드에 하드코딩하지 않고 `config.py`의 `Settings` 또는 상수로 관리한다.
+
+---
+
+## 3. 코딩 규칙
+
+### 네이밍 규칙
 
 함수·변수·클래스 명명 규칙은 아래 스펙 문서를 따른다.
 
@@ -16,27 +80,23 @@
 - bool 반환 함수: `is_` / `has_` 접두사 필수
 - 예외는 주석으로 이유 명시 후 허용
 
----
-
-## 2. 주석 규칙
+### 주석 규칙
 
 코드를 수정하거나 추가할 때 **간결하고 의도가 드러나는 주석**을 달아야 한다.
 
-### 주석 작성 기준
-
+**작성 기준:**
 - **왜(Why)** 이 코드가 필요한지 한 줄로 설명한다. 코드만 보면 알 수 있는 "무엇(What)" 주석은 달지 않는다.
 - **모듈**: 파일 상단에 한 줄 요약 docstring을 반드시 작성한다 (`"""역할 설명."""`).
 - **함수/클래스**: 역할과 주의사항만 한두 줄로 적는다. 명백한 것은 생략한다.
 - **비자명한 로직** (라이브러리 옵션, 수식, 경쟁 조건 등): 해당 줄 끝 또는 바로 위에 이유를 한 줄로 적는다.
 - **상수/설정값**: 단위·허용 범위·변경 시 영향을 인라인으로 적는다.
 
-### 금지 사항
-
+**금지 사항:**
 - `# 파일을 읽는다`, `# 결과를 반환한다` 처럼 코드를 그대로 번역한 주석.
 - 함수 이름과 똑같은 내용의 docstring.
 - 장황한 구분선 블록(`# ---...---`) — 섹션 구분 외에는 사용하지 않는다.
 
-### 간결한 주석 예시
+**간결한 주석 예시:**
 
 ```python
 # 내부 OpenMP 스레드와 ThreadPoolExecutor 충돌 방지
@@ -51,7 +111,51 @@ dpi=300,  # 낮추면 속도 향상, OCR 정확도 하락
 
 ---
 
-## 3. 코드 변경 시 필수 동기화 파일
+## 4. 설정값 관리 규칙
+
+설정값 관리의 상세 분류 체계와 배치 패턴은 아래 스펙 문서를 따른다.
+
+→ [@docs/superpowers/specs/2026-04-14-env-config-design.md](docs/superpowers/specs/2026-04-14-env-config-design.md)
+
+**핵심 요약:**
+새 설정값을 추가할 때 아래 3가지 판단 질문으로 분류한다.
+- "다른 서버에 배포할 때 이 값을 바꿔야 하나?" → **환경 설정** (`.env` + `Settings` + Dockerfile `ENV` + docker-compose)
+- "코드 수정 없이 성능·동작을 튜닝하고 싶을 수 있나?" → **튜닝 파라미터** (`.env` + `Settings`)
+- "이 값이 바뀌면 앱의 분류 로직 자체가 바뀌나?" → **비즈니스 로직 상수** (`Settings` 필드 기본값만)
+
+**환경변수 규칙:**
+- `.env`는 git에 커밋하지 않는다 (`.gitignore`에 포함).
+- 새 설정값을 `Settings`에 추가할 때 `.env`에도 해당 항목(주석 포함)을 추가한다.
+- 민감한 값(API 키, 비밀번호)은 절대 코드에 하드코딩하지 않는다.
+
+**금지 사항:**
+- 수치·경로를 `.py` 코드 안에 리터럴로 직접 쓰기
+- 튜닝 파라미터를 `Settings` 기본값에만 숨기고 `.env`에 미노출
+- `config.py` 모듈 상수(`UPPER_SNAKE_CASE`)와 `Settings` 필드에 같은 값 중복 정의
+- Docker 관련 환경 설정을 `Dockerfile`에만 하드코딩하고 `.env` 미연동
+
+---
+
+## 5. Docker 규칙
+
+- `Dockerfile`은 **BuildKit** (`# syntax=docker/dockerfile:1`) 을 사용한다.
+- apt 캐시와 pip 캐시는 `--mount=type=cache` 로 처리한다 (`rm -rf /var/lib/apt/lists/*` 불필요).
+- `torch` / `torchvision`은 CPU 전용 인덱스(`https://download.pytorch.org/whl/cpu`)에서 먼저 설치한다.
+- 컨테이너는 **비루트 사용자(`appuser`)** 로 실행한다.
+- `ENV OMP_NUM_THREADS=1` 은 항상 유지한다.
+
+---
+
+## 6. 테스트 규칙
+
+- 새 기능 추가 시 `tests/test_ocr.py`에 대응하는 테스트 케이스를 추가한다.
+- 외부 엔진(EasyOCR, Tesseract, pdfplumber)은 Mock으로 대체해 테스트 속도를 유지한다.
+- 테스트는 `pytest tests/ -v` 로 실행한다.
+- `requirements-dev.txt`에 테스트 의존성이 있어야 한다.
+
+---
+
+## 7. 코드 변경 시 필수 동기화 파일
 
 코드(`.py`)를 수정할 때마다 아래 파일들을 **항상 최신 상태로 유지**해야 한다.
 변경이 필요 없는 파일도 **확인 후 확인했음을 명시**해야 한다.
@@ -80,7 +184,7 @@ dpi=300,  # 낮추면 속도 향상, OCR 정확도 하락
 
 ---
 
-## 4. requirements 분리 규칙
+## 8. requirements 분리 규칙
 
 - `requirements.txt` — **프로덕션 런타임**에 필요한 패키지만 포함
 - `requirements-dev.txt` — **개발/테스트 전용** 패키지 포함 (`pytest`, `httpx`, `mypy` 등)
@@ -89,89 +193,30 @@ dpi=300,  # 낮추면 속도 향상, OCR 정확도 하락
 
 ---
 
-## 5. 프로젝트 구조 규칙
+## 9. 설계 문서 참조
 
-```
-app/
-├── main.py              # 앱 진입점, 라우터 등록만 담당. 비즈니스 로직 금지.
-├── core/
-│   └── config.py        # 설정값과 상수만. 다른 app 모듈을 import하지 않는다.
-├── api/
-│   └── routes/          # HTTP 레이어. 검증 후 서비스로 위임. 직접 로직 금지.
-├── schemas/             # 데이터 구조 정의. Pydantic(응답) + dataclass(내부).
-└── services/            # 비즈니스 로직. 라우터/스키마를 알지만 routes는 모른다.
-```
+프로젝트의 설계 결정과 구현 플랜은 아래 문서에 기록되어 있다. 관련 작업 시 반드시 참조한다.
 
-- 새 기능은 반드시 위 계층 구조를 따른다.
-- 서비스 함수는 항상 `PageResult` 또는 `OCRResponse` 호환 구조를 반환한다.
-- 설정값은 코드에 하드코딩하지 않고 `config.py`의 `Settings` 또는 상수로 관리한다.
+### 주석 리팩터링
 
----
+→ [@docs/superpowers/specs/2026-04-13-comment-refactor-design.md](docs/superpowers/specs/2026-04-13-comment-refactor-design.md) — 과도한 주석 제거 및 기능적 주석 간결화 설계
 
-## 6. Docker 규칙
+### 네이밍 규칙
 
-- `Dockerfile`은 **BuildKit** (`# syntax=docker/dockerfile:1`) 을 사용한다.
-- apt 캐시와 pip 캐시는 `--mount=type=cache` 로 처리한다 (`rm -rf /var/lib/apt/lists/*` 불필요).
-- `torch` / `torchvision`은 CPU 전용 인덱스(`https://download.pytorch.org/whl/cpu`)에서 먼저 설치한다.
-- 컨테이너는 **비루트 사용자(`appuser`)** 로 실행한다.
-- `ENV OMP_NUM_THREADS=1` 은 항상 유지한다.
+→ [@docs/superpowers/specs/2026-04-14-naming-conventions-design.md](docs/superpowers/specs/2026-04-14-naming-conventions-design.md) — 함수 동사 테이블, 기존 함수 리네임 맵
+→ [@docs/superpowers/plans/2026-04-14-naming-conventions-rename.md](docs/superpowers/plans/2026-04-14-naming-conventions-rename.md) — 리네임 구현 플랜
 
----
+### 설정값 관리 (.env)
 
-## 7. 테스트 규칙
+→ [@docs/superpowers/specs/2026-04-14-env-config-design.md](docs/superpowers/specs/2026-04-14-env-config-design.md) — 설정값 3분류 체계 및 배치 패턴
+→ [@docs/superpowers/plans/2026-04-14-env-config.md](docs/superpowers/plans/2026-04-14-env-config.md) — .env 통합 구현 플랜
 
-- 새 기능 추가 시 `tests/test_ocr.py`에 대응하는 테스트 케이스를 추가한다.
-- 외부 엔진(EasyOCR, Tesseract, pdfplumber)은 Mock으로 대체해 테스트 속도를 유지한다.
-- 테스트는 `pytest tests/ -v` 로 실행한다.
-- `requirements-dev.txt`에 테스트 의존성이 있어야 한다.
+### OCR 라우팅
 
----
+→ [@docs/superpowers/specs/2026-04-15-ocr-routing-design.md](docs/superpowers/specs/2026-04-15-ocr-routing-design.md) — 컨텐츠 기반 엔진 선택 설계 (Tesseract → VLM 폴백)
+→ [@docs/superpowers/plans/2026-04-15-ocr-routing.md](docs/superpowers/plans/2026-04-15-ocr-routing.md) — OCR 라우팅 구현 플랜
 
-## 8. 환경변수 규칙
+### VLM 구현
 
-- `.env`는 git에 커밋하지 않는다 (`.gitignore`에 포함).
-- 새 설정값을 `Settings`에 추가할 때 `.env`에도 해당 항목(주석 포함)을 추가한다.
-- 민감한 값(API 키, 비밀번호)은 절대 코드에 하드코딩하지 않는다.
-
----
-
-## 9. 설정값 관리 규칙 — `.env` 단일 진실 공급원
-
-새 설정값을 추가할 때 아래 3가지 중 하나로 분류하고 지정된 위치에만 배치한다.
-
-| 분류 | 판단 기준 | 배치 |
-|---|---|---|
-| **환경 설정** | 서버·배포 환경마다 다를 수 있는 값 | `.env` + `Settings` + Dockerfile `ENV`(폴백) + docker-compose `${VAR}` |
-| **튜닝 파라미터** | 기본값은 있지만 코드 수정 없이 조정 가능한 값 | `.env` + `Settings` |
-| **비즈니스 로직 상수** | 앱의 분류 경계를 정의하는 값. 배포 환경과 무관 | `Settings` 필드 기본값만 (`.env` 항목 없음) |
-
-**판단 질문:**
-- "다른 서버에 배포할 때 이 값을 바꿔야 하나?" → 환경 설정
-- "코드 수정 없이 성능·동작을 튜닝하고 싶을 수 있나?" → 튜닝 파라미터
-- "이 값이 바뀌면 앱의 분류 로직 자체가 바뀌나?" → 비즈니스 로직 상수
-
-### 분류별 배치 패턴
-
-**환경 설정 — 4단계 연동**
-
-1. `.env` — 단일 진실 공급원: `PORT=8900`
-2. `config.py Settings` 필드: `port: int = 8900`
-3. `Dockerfile` — `.env` 없을 때 폴백: `ENV PORT=8900`
-4. `docker-compose.yml` — `.env` 값 참조: `"${PORT:-8900}:${PORT:-8900}"`
-
-**튜닝 파라미터 — 2단계**
-
-1. `.env` — 값 노출 (Settings 기본값에만 숨기지 않는다): `PDF_DPI=300`
-2. `config.py Settings` 필드: `pdf_dpi: int = 300`
-
-**비즈니스 로직 상수 — Settings 필드만**
-
-`config.py`의 `Settings` 안에 기본값으로 정의한다. `.env` 항목 없음.
-변경하려면 `config.py`를 직접 수정한다 (코드 리뷰 없이 배포 환경에서 변경 불가).
-
-### 금지 사항
-
-- 수치·경로를 `.py` 코드 안에 리터럴로 직접 쓰기
-- 튜닝 파라미터를 `Settings` 기본값에만 숨기고 `.env`에 미노출
-- `config.py` 모듈 상수(`UPPER_SNAKE_CASE`)와 `Settings` 필드에 같은 값 중복 정의
-- Docker 관련 환경 설정을 `Dockerfile`에만 하드코딩하고 `.env` 미연동
+→ [@docs/superpowers/specs/2026-04-15-vlm-design.md](docs/superpowers/specs/2026-04-15-vlm-design.md) — GPT-4V 기반 VLM 폴백 설계
+→ [@docs/superpowers/plans/2026-04-15-vlm-implementation.md](docs/superpowers/plans/2026-04-15-vlm-implementation.md) — VLM 구현 플랜
